@@ -1,6 +1,5 @@
 FROM python:3
 MAINTAINER Cuupa
-
 WORKDIR /opt/app/
 
 COPY requirements.txt ./

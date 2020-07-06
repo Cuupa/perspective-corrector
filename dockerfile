@@ -1,4 +1,5 @@
 FROM python:3
+MAINTAINER Cuupa
 
 WORKDIR /opt/app/
 
@@ -12,4 +13,5 @@ RUN chown python app.py
 RUN chmod +x app.py
 USER python
 
+EXPOSE 8080/tcp
 CMD [ "python3", "./app.py" ]

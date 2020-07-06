@@ -24,4 +24,4 @@ Listens per default at port 8080
     body.add("file", fileEntity);
     
     HttpEntity<MultiValueMap<String, Object>> requestEntity = new HttpEntity<>(body, data, headers));
-    final ResponseEntity<Byte[]> entity = template.postForEntity("http://localhost:8080/api/image/transform", requestEntity, Byte[].class);
+    final ResponseEntity<Byte[]> entity = template.postForEntity("http://server.local:8080/api/image/transform", requestEntity, Byte[].class);

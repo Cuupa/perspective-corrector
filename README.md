@@ -5,7 +5,7 @@ Perspective correction of documents with OpenCV.
 Listens per default at port 8080
 
 ## Provides
-    GET /status
+    GET/POST /status
     POST /api/image/transform
     
   

@@ -6,12 +6,12 @@ app = Flask(__name__)
 
 
 def preProcessing(img):
-    '''
+    """
     Does some pre processing to determine the document borders
     Does greyscaling, gaussian blur, cannary, dialation and erodation
     :param img: the image
     :return: the preprocessed image
-    '''
+    """
     img_grey = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
     img_blur = cv2.GaussianBlur(img_grey, (5, 5), 1)
     img_canny = cv2.Canny(img_blur, 150, 150)
@@ -59,6 +59,13 @@ def getWarp(img, biggest_contour):
     return final_image
 
 
+def get_image(upload):
+    data = upload.read()
+    np_array = np.frombuffer(data, np.uint8)
+    img = cv2.imdecode(np_array, -1)
+    return img
+
+
 @app.route("/api/image/transform", methods=['POST'])
 def transform():
     files = request.files
@@ -68,14 +75,7 @@ def transform():
     if not upload:
         return Response("MISSING FILE", 400)
 
-    data = upload.read()
-
-    file = open(list(files.keys())[0], 'wb')
-    file.write(data)
-    file.close()
-
-    np_array = np.frombuffer(data, np.uint8)
-    img = cv2.imdecode(np_array, -1)
+    img = get_image(upload)
     preprocessed_img = preProcessing(img)
     biggest_contour_result = getContours(preprocessed_img)
     final_image = getWarp(img, biggest_contour_result)

@@ -1,3 +1,5 @@
+from sys import argv
+
 import cv2
 import numpy as np
 from flask import Flask, request, Response
@@ -5,7 +7,7 @@ from flask import Flask, request, Response
 app = Flask(__name__)
 
 
-def preProcessing(img):
+def pre_processing(img):
     """
     Does some pre processing to determine the document borders
     Does greyscaling, gaussian blur, cannary, dialation and erodation
@@ -20,7 +22,7 @@ def preProcessing(img):
     return cv2.erode(img_dialation, kernel, iterations=1)
 
 
-def getContours(img):
+def get_contours(img):
     max_area = 0
     biggest_contour = np.array([])
     contours, hierachy = cv2.findContours(img, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
@@ -38,32 +40,30 @@ def getContours(img):
 
 def reorder(points):
     reshaped_points = points.reshape((4, 2))
-    reorderd_points = np.zeros((4, 1, 2), np.int32)
+    reordered_points = np.zeros((4, 1, 2), np.int32)
     added = reshaped_points.sum(1)
-    reorderd_points[0] = reshaped_points[np.argmin(added)]
-    reorderd_points[3] = reshaped_points[np.argmax(added)]
+    reordered_points[0] = reshaped_points[np.argmin(added)]
+    reordered_points[3] = reshaped_points[np.argmax(added)]
     diff = np.diff(reshaped_points, 1)
-    reorderd_points[1] = reshaped_points[np.argmin(diff)]
-    reorderd_points[2] = reshaped_points[np.argmax(diff)]
-    return reorderd_points
+    reordered_points[1] = reshaped_points[np.argmin(diff)]
+    reordered_points[2] = reshaped_points[np.argmax(diff)]
+    return reordered_points
 
 
-def getWarp(img, biggest_contour):
+def get_warp(img, biggest_contour):
     dimensions = img.shape
     height = dimensions[0]
     width = dimensions[1]
     point1 = np.float32(reorder(biggest_contour))
     point2 = np.float32([[0, 0], [width, 0], [0, height], [width, height]])
     perspective = cv2.getPerspectiveTransform(point1, point2)
-    final_image = cv2.warpPerspective(img, perspective, (width, height))
-    return final_image
+    return cv2.warpPerspective(img, perspective, (width, height))
 
 
 def get_image(upload):
     data = upload.read()
     np_array = np.frombuffer(data, np.uint8)
-    img = cv2.imdecode(np_array, -1)
-    return img
+    return cv2.imdecode(np_array, cv2.IMREAD_UNCHANGED)
 
 
 @app.route("/api/image/transform", methods=['POST'])
@@ -76,17 +76,26 @@ def transform():
         return Response("MISSING FILE", 400)
 
     img = get_image(upload)
-    preprocessed_img = preProcessing(img)
-    biggest_contour_result = getContours(preprocessed_img)
-    final_image = getWarp(img, biggest_contour_result)
-    Response.data = final_image
-    return final_image
+    if img is None:
+        return Response("INVALID IMAGE FILE", 400)
+
+    preprocessed_img = pre_processing(img)
+    biggest_contour_result = get_contours(preprocessed_img)
+    final_image = get_warp(img, biggest_contour_result)
+    return Response(final_image)
 
 
-@app.route("/status", methods=['POST', 'GET'])
+@app.route("/status")
 def status():
-    return "200"
+    return ""
+
+
+def get_port():
+    for arg in range(1, len(argv)):
+        if arg == "-port":
+            return argv[arg + 1]
+    return 8080
 
 
 if __name__ == '__main__':
-    app.run(host="0.0.0.0", port=8080)
+    app.run(host="0.0.0.0", port=get_port())

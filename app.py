@@ -1,5 +1,7 @@
 import io
-import os.path
+import logging
+import os
+import time
 from sys import argv
 
 import PIL.Image as Image
@@ -71,11 +73,6 @@ def get_image(upload):
     return cv2.imdecode(np_array, cv2.IMREAD_UNCHANGED)
 
 
-def get_img_format(upload):
-    _, extension = os.path.splitext(upload.filename)
-    return extension
-
-
 def process(img, treshold1, treshold2):
     preprocessed_img = pre_processing(img, treshold1, treshold2)
     biggest_contour_result = get_contours(preprocessed_img)
@@ -114,6 +111,7 @@ def verify_image(img):
     Definitely a single-colored and therefore a corrupted image.
     """
     if len(cluster) == 1:
+        logging.error("The image has only one color and is likely to be invalid")
         return False
 
     """
@@ -122,12 +120,16 @@ def verify_image(img):
     if len(cluster) <= 5:
         keys = cluster.keys()
         if max(keys) - min(keys) <= 5:
+            logging.error("The image has only " + str(
+                len(cluster)) + " different colors with nearly " +
+                          "indistinguishable color differences and is likely to be invalid")
             return False
     return True
 
 
 @app.route("/api/image/transform", methods=['POST'])
 def transform():
+    start = time.perf_counter()
     files = request.files
     if not len(files):
         return Response("MISSING FILE, CHECK IF CONTENT TYPE IS MULTIPART FORM", 400)
@@ -136,21 +138,23 @@ def transform():
     if not upload:
         return Response("MISSING FILE", 400)
 
-    img_format = get_img_format(upload)
+    image_name, extension = os.path.splitext(upload.filename)
     img = get_image(upload)
     if img is None:
         return Response("INVALID IMAGE FILE", 400)
 
-    final_image = process(img, 150, 150)
+    threshold1 = 150
+    threshold2 = 150
 
-    success, img_result = cv2.imencode(img_format, final_image)
+    final_image = process(img, threshold1, threshold2)
+
+    success, img_result = cv2.imencode(extension, final_image)
     success = verify_image(img_result)
 
-    threshold1 = 140
-    threshold2 = 140
     while not success:
+        logging.error("Failed to get a valid image with threshold=" + str(threshold1) + " ... retrying")
         final_image = process(img, threshold1, threshold2)
-        success, img_result = cv2.imencode(img_format, final_image)
+        success, img_result = cv2.imencode(extension, final_image)
         success = verify_image(img_result)
         threshold1 = threshold1 - 20
         threshold2 = threshold2 - 20
@@ -159,9 +163,12 @@ def transform():
         If no valid result seems to be found, return the original image
         """
         if threshold1 < 0 and threshold2 < 0:
-            original_image = cv2.imencode(img_format, img)
+            logging.error("Failed to get a valid image. Returning the original image")
+            original_image = cv2.imencode(extension, img)
             return Response(original_image.tobytes())
 
+    stop = time.perf_counter()
+    logging.error("Image transformation of '" + image_name + "' took " + str(round(stop - start, 2)) + " ms")
     return Response(img_result.tobytes())
 
 

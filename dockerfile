@@ -15,5 +15,5 @@ RUN chmod +x app.py
 RUN chmod +x __init__.py
 USER python
 
-EXPOSE 8080/tcp
+EXPOSE 5000/tcp
 CMD [ "python3", "./app.py" ]

@@ -2,36 +2,38 @@
 
 Perspective correction of documents with OpenCV.
 
-Listens per default at port 8080
+Listens per default at port 5000
 
 ## Arguments
     -port [portnumber]
 
 ## Provides
-    [GET/POST] /status
+    [GET/POST] /api/status
     [POST] /api/image/transform
     
   
 ## Usage
 
 ### Spring Rest
-    File imgPath = new File("/path/to/image.jpg");
-    final byte[] data = getImageBytearray(imgPath);
+    final byte[] payload = readFile();
+
+    RestTemplate upload = new RestTemplate();
+    HttpHeaders headers = new HttpHeaders();
+    headers.set("Content-Type", "multipart/form-data");
+    headers.set("Accept", "*/*");
 
     MultiValueMap<String, String> fileMap = new LinkedMultiValueMap<>();
-    ContentDisposition contentDisposition = ContentDisposition.builder("form-data").name(imgPath.getName()).filename(imgPath.getName()).build();
-    fileMap.add(HttpHeaders.CONTENT_DISPOSITION, contentDisposition.toString());
-    fileMap.add(HttpHeaders.CONTENT_TYPE, MediaType.IMAGE_JPEG_VALUE);
-    
-    HttpEntity<byte[]> fileEntity = new HttpEntity<>(data, fileMap);
+    ContentDisposition contentDisposition = ContentDisposition.builder("form-data")
+        .name("key")
+        .filename("perspective.png")
+        .build();
+
+    fileMap.add("Content-Disposition", contentDisposition.toString());
+    fileMap.add("Content-Type", "image/jpeg");
+
+    HttpEntity<byte[]> entity = new HttpEntity<>(payload, fileMap);
     MultiValueMap<String, Object> body = new LinkedMultiValueMap<>();
-    body.add("file", fileEntity);
-    
-    HttpHeaders headers = new HttpHeaders();
-    headers.setContentType(MediaType.MULTIPART_FORM_DATA);
-    headers.set("Accept", "*/*");
-    
-    HttpEntity<MultiValueMap<String, Object>> requestEntity = new HttpEntity<>(body, data, headers));
-    RestTemplate template = new RestTemplate();
-    template.getMessageConverters().add(new ResourceHttpMessageConverter());
-    final ResponseEntity<Byte[]> entity = template.postForEntity("http://server.local:8080/api/image/transform", requestEntity, Byte[].class);
+    body.add("file", entity);
+    HttpEntity<MultiValueMap<String, Object>> requestData = new HttpEntity<>(body, headers);
+
+    ResponseEntity<byte[]> responseEntity = upload.postForEntity("http://127.0.0.1:5000/api/image/transform", requestData, byte[].class);

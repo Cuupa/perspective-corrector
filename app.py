@@ -1,5 +1,8 @@
+import io
+import os.path
 from sys import argv
 
+import PIL.Image as Image
 import cv2
 import numpy as np
 from flask import Flask, request, Response
@@ -7,16 +10,18 @@ from flask import Flask, request, Response
 app = Flask(__name__)
 
 
-def pre_processing(img):
+def pre_processing(img, treshold1, treshold2):
     """
     Does some pre processing to determine the document borders
     Does greyscaling, gaussian blur, cannary, dialation and erodation
+    :param treshold2:
+    :param treshold1:
     :param img: the image
     :return: the preprocessed image
     """
     img_grey = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
     img_blur = cv2.GaussianBlur(img_grey, (5, 5), 1)
-    img_canny = cv2.Canny(img_blur, 150, 150)
+    img_canny = cv2.Canny(img_blur, treshold1, treshold2)
     kernel = np.ones((5, 5))
     img_dialation = cv2.dilate(img_canny, kernel, iterations=2)
     return cv2.erode(img_dialation, kernel, iterations=1)
@@ -25,7 +30,7 @@ def pre_processing(img):
 def get_contours(img):
     max_area = 0
     biggest_contour = np.array([])
-    contours, hierachy = cv2.findContours(img, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
+    contours, hierarchy = cv2.findContours(img, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
 
     for contour in contours:
         area = cv2.contourArea(contour)
@@ -66,26 +71,101 @@ def get_image(upload):
     return cv2.imdecode(np_array, cv2.IMREAD_UNCHANGED)
 
 
+def get_img_format(upload):
+    _, extension = os.path.splitext(upload.filename)
+    return extension
+
+
+def process(img, treshold1, treshold2):
+    preprocessed_img = pre_processing(img, treshold1, treshold2)
+    biggest_contour_result = get_contours(preprocessed_img)
+    return get_warp(img, biggest_contour_result)
+
+
+def verify_image(img):
+    """
+    Verifies the image based on the occurring colors. If the number of different colors is too indistinguishable the
+    image is likely to be corrupted. This may be subject to finetuning
+    :param img:
+    :return:
+    """
+    image = Image.open(io.BytesIO(img))
+    image = image.resize((200, 200))
+    cluster = {}
+
+    for x in range(image.width):
+        for y in range(image.height):
+            r, g, b, alpha = image.getpixel((x, y))
+            if cluster.get(r) is not None:
+                cluster[r] = cluster[r] + 1
+            if cluster.get(g) is not None:
+                cluster[g] = cluster[g] + 1
+            if cluster.get(b) is not None:
+                cluster[b] = cluster[b] + 1
+
+            if cluster.get(r) is None:
+                cluster[r] = 1
+            if cluster.get(g) is None:
+                cluster[g] = 1
+            if cluster.get(b) is None:
+                cluster[b] = 1
+
+    """
+    Definitely a single-colored and therefore a corrupted image.
+    """
+    if len(cluster) == 1:
+        return False
+
+    """
+    If just a few colors are found, check if the color difference is noticeable
+    """
+    if len(cluster) <= 5:
+        keys = cluster.keys()
+        if max(keys) - min(keys) <= 5:
+            return False
+    return True
+
+
 @app.route("/api/image/transform", methods=['POST'])
 def transform():
     files = request.files
     if not len(files):
         return Response("MISSING FILE, CHECK IF CONTENT TYPE IS MULTIPART FORM", 400)
     upload = files['key'] if 'key' in files else list(files.values())[0]
+
     if not upload:
         return Response("MISSING FILE", 400)
 
+    img_format = get_img_format(upload)
     img = get_image(upload)
     if img is None:
         return Response("INVALID IMAGE FILE", 400)
 
-    preprocessed_img = pre_processing(img)
-    biggest_contour_result = get_contours(preprocessed_img)
-    final_image = get_warp(img, biggest_contour_result)
-    return Response(final_image)
+    final_image = process(img, 150, 150)
+
+    success, img_result = cv2.imencode(img_format, final_image)
+    success = verify_image(img_result)
+
+    threshold1 = 140
+    threshold2 = 140
+    while not success:
+        final_image = process(img, threshold1, threshold2)
+        success, img_result = cv2.imencode(img_format, final_image)
+        success = verify_image(img_result)
+        threshold1 = threshold1 - 20
+        threshold2 = threshold2 - 20
+
+        """
+        If no valid result seems to be found, return the original image
+        """
+        if threshold1 < 0 and threshold2 < 0:
+            original_image = cv2.imencode(img_format, img)
+            return Response(original_image.tobytes())
+
+    return Response(img_result.tobytes())
 
 
-@app.route("/status")
+@app.route("/api/status")
 def status():
     return ""
 
@@ -94,7 +174,7 @@ def get_port():
     for arg in range(1, len(argv)):
         if arg == "-port":
             return argv[arg + 1]
-    return 8080
+    return 5000
 
 
 if __name__ == '__main__':

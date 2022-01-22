@@ -21,7 +21,7 @@ iso_216_ratio = 1.41
 def pre_processing(img, treshold1, treshold2):
     """
     Does some pre processing to determine the document borders
-    Does greyscaling, gaussian blur, cannary, dialation and erodation
+    Does greyscaling, gaussian blur, cannary, dilation and erodation
     :param treshold2:
     :param treshold1:
     :param img: the image
@@ -64,8 +64,7 @@ def reorder(points):
 
 
 def get_image(data):
-    np_array = np.frombuffer(data, np.uint8)
-    return cv2.imdecode(np_array, cv2.IMREAD_UNCHANGED)
+    return cv2.imdecode(np.frombuffer(data, np.uint8), cv2.IMREAD_UNCHANGED)
 
 
 def process(img, treshold1, treshold2):
@@ -96,9 +95,6 @@ def get_warp(img, biggest_contour):
     # image center
     x0 = cols / 2.0
     y0 = rows / 2.0
-
-    # image = pre_processing(img, 100, 100)
-    # ordered_corners = reorder(get_contours(image))
 
     ordered_corners = reorder(biggest_contour)
 
@@ -170,8 +166,6 @@ def get_warp(img, biggest_contour):
     M = cv2.getPerspectiveTransform(pts1, pts2)
 
     dst = cv2.warpPerspective(img, M, (W, H))
-
-    _, img_result = cv2.imencode(".jpg", dst)
     return dst
 
 
